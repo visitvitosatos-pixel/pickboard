@@ -6,16 +6,27 @@ import { savePickToStorage } from "@/lib/utils/picks-storage";
 import type { StoredPick } from "@/types/pick";
 
 type BetType = "single" | "express";
+type MatchDayFilter = "today" | "tomorrow";
 
 type ExpressEvent = {
   eventName: string;
   marketType: string;
 };
 
+type MatchOption = {
+  id: number;
+  competition: string;
+  utcDate: string;
+  status: string;
+  homeTeam: string;
+  awayTeam: string;
+};
+
 type FormState = {
   betType: BetType;
   sport: string;
   league: string;
+  selectedMatchId: string;
   eventName: string;
   marketType: string;
   odds: string;
@@ -25,7 +36,7 @@ type FormState = {
 };
 
 type FormErrors = {
-  eventName?: string;
+  selectedMatchId?: string;
   marketType?: string;
   odds?: string;
   expressEvents?: Array<{
@@ -41,6 +52,7 @@ const initialFormState: FormState = {
   betType: "single",
   sport: "Футбол",
   league: "",
+  selectedMatchId: "",
   eventName: "",
   marketType: "",
   odds: "",
@@ -71,11 +83,39 @@ function getMoscowTimestampLabel() {
   }).format(new Date());
 }
 
+function formatMatchDateLabel(utcDate: string) {
+  const date = new Date(utcDate);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Дата неизвестна";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Moscow",
+  }).format(date);
+}
+
+function buildMatchLabel(match: MatchOption) {
+  return `${match.homeTeam} — ${match.awayTeam}`;
+}
+
 function getInputClassName(hasError: boolean) {
-  return `w-full rounded-2xl border px-4 py-3 text-white outline-none placeholder:text-white/30 ${
+  return `w-full rounded-2xl border px-4 py-3 text-white outline-none ${
     hasError
-      ? "border-rose-400/40 bg-rose-400/5 focus:border-rose-400/60"
-      : "border-white/10 bg-white/5 focus:border-white/20"
+      ? "border-rose-400/40 bg-rose-400/10 focus:border-rose-400/60"
+      : "border-white/10 bg-neutral-900 focus:border-white/20"
+  }`;
+}
+
+function getSelectClassName(hasError: boolean) {
+  return `w-full rounded-2xl border px-4 py-3 text-sm outline-none ${
+    hasError
+      ? "border-rose-400/40 bg-neutral-900 text-white focus:border-rose-400/60"
+      : "border-white/10 bg-neutral-900 text-white focus:border-white/20"
   }`;
 }
 
@@ -107,18 +147,9 @@ function validateForm(form: FormState): FormErrors {
     }
   }
 
-  if (form.stakeUnits.trim()) {
-    const stake = Number(form.stakeUnits);
-
-    if (Number.isNaN(stake) || stake <= 0) {
-      errors.odds = errors.odds;
-      errors.expressEvents = errors.expressEvents;
-    }
-  }
-
   if (form.betType === "single") {
-    if (!form.eventName.trim()) {
-      errors.eventName = "Укажи событие.";
+    if (!form.selectedMatchId.trim()) {
+      errors.selectedMatchId = "Выбери матч из списка.";
     }
 
     if (!form.marketType.trim()) {
@@ -168,9 +199,7 @@ function buildStoredPick(form: FormState): StoredPick {
       author: currentAuthor,
       sport: form.sport,
       league: form.league,
-      eventName: form.league
-        ? `${form.eventName} · ${form.league}`
-        : form.eventName,
+      eventName: form.eventName,
       market: form.marketType,
       odds: form.odds,
       stakeUnits: form.stakeUnits || "",
@@ -212,6 +241,10 @@ export function AddPickForm() {
   const [submittedPick, setSubmittedPick] = useState<StoredPick | null>(null);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [isSavedToFeed, setIsSavedToFeed] = useState(false);
+  const [matches, setMatches] = useState<MatchOption[]>([]);
+  const [isMatchesLoading, setIsMatchesLoading] = useState(true);
+  const [matchesError, setMatchesError] = useState("");
+  const [matchDayFilter, setMatchDayFilter] = useState<MatchDayFilter>("today");
 
   useEffect(() => {
     const savedDraft = window.localStorage.getItem(draftStorageKey);
@@ -233,9 +266,36 @@ export function AddPickForm() {
     }
   }, []);
 
+  useEffect(() => {
+    async function loadMatches() {
+      setIsMatchesLoading(true);
+      setMatchesError("");
+
+      try {
+        const response = await fetch(`/api/matches?day=${matchDayFilter}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Не удалось загрузить матчи.");
+        }
+
+        setMatches(Array.isArray(data.matches) ? data.matches : []);
+      } catch (error) {
+        setMatchesError(error instanceof Error ? error.message : "Ошибка загрузки матчей.");
+      } finally {
+        setIsMatchesLoading(false);
+      }
+    }
+
+    loadMatches();
+  }, [matchDayFilter]);
+
   const formIsEmpty = useMemo(() => {
     const singleFieldsEmpty =
       !form.league.trim() &&
+      !form.selectedMatchId.trim() &&
       !form.eventName.trim() &&
       !form.marketType.trim() &&
       !form.odds.trim() &&
@@ -260,6 +320,21 @@ export function AddPickForm() {
     setIsSavedToFeed(false);
   }
 
+  function handleSingleMatchChange(matchId: string) {
+    const selectedMatch = matches.find((match) => String(match.id) === matchId);
+
+    setForm((currentForm) => ({
+      ...currentForm,
+      selectedMatchId: matchId,
+      eventName: selectedMatch ? buildMatchLabel(selectedMatch) : "",
+      league: selectedMatch ? selectedMatch.competition : currentForm.league,
+    }));
+
+    setErrors({});
+    setIsDraftSaved(false);
+    setIsSavedToFeed(false);
+  }
+
   function updateExpressEvent(index: number, field: keyof ExpressEvent, value: string) {
     setForm((currentForm) => {
       const nextEvents = [...currentForm.expressEvents] as [ExpressEvent, ExpressEvent, ExpressEvent];
@@ -277,6 +352,11 @@ export function AddPickForm() {
     setErrors({});
     setIsDraftSaved(false);
     setIsSavedToFeed(false);
+  }
+
+  function handleExpressMatchChange(index: number, matchId: string) {
+    const selectedMatch = matches.find((match) => String(match.id) === matchId);
+    updateExpressEvent(index, "eventName", selectedMatch ? buildMatchLabel(selectedMatch) : "");
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -322,16 +402,24 @@ export function AddPickForm() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-        <p className="text-sm font-medium text-white">Как теперь работает форма</p>
+        <p className="text-sm font-medium text-white">Что исправили в логике</p>
         <p className="mt-2 text-sm leading-6 text-white/65">
-          Футбол стоит по умолчанию. Время руками вводить не нужно — система сама
-          фиксирует момент публикации по МСК. Для экспресса можно добавить до 3 событий.
+          Для ординара матч выбирается только из футбольного API. Плюс добавлен выбор:
+          <span className="font-medium text-white"> сегодня </span>
+          или
+          <span className="font-medium text-white"> завтра</span>.
         </p>
       </div>
 
       {isDraftLoaded ? (
         <div className="rounded-3xl border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-200">
           Найден сохраненный черновик. Можешь продолжить заполнение формы.
+        </div>
+      ) : null}
+
+      {matchesError ? (
+        <div className="rounded-3xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">
+          Не удалось загрузить матчи: {matchesError}
         </div>
       ) : null}
 
@@ -375,25 +463,60 @@ export function AddPickForm() {
               type="text"
               value={form.league}
               onChange={(event) => updateField("league", event.target.value)}
-              placeholder="Например: EPL"
+              placeholder="Подставится автоматически после выбора матча"
               className={getInputClassName(false)}
             />
           </label>
         </section>
 
+        <section className="space-y-3">
+          <span className="text-sm text-white/70">День матчей</span>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setMatchDayFilter("today")}
+              className={getChipClassName(matchDayFilter === "today")}
+            >
+              Сегодня
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMatchDayFilter("tomorrow")}
+              className={getChipClassName(matchDayFilter === "tomorrow")}
+            >
+              Завтра
+            </button>
+          </div>
+        </section>
+
         {form.betType === "single" ? (
           <>
             <label className="space-y-2">
-              <span className="text-sm text-white/70">Событие *</span>
-              <input
-                type="text"
-                value={form.eventName}
-                onChange={(event) => updateField("eventName", event.target.value)}
-                placeholder="Например: Arsenal vs Chelsea"
-                className={getInputClassName(Boolean(errors.eventName))}
-              />
-              {errors.eventName ? (
-                <p className="text-sm text-rose-300">{errors.eventName}</p>
+              <span className="text-sm text-white/70">Матч *</span>
+              <select
+                value={form.selectedMatchId}
+                onChange={(event) => handleSingleMatchChange(event.target.value)}
+                className={getSelectClassName(Boolean(errors.selectedMatchId))}
+                disabled={isMatchesLoading || matches.length === 0}
+              >
+                <option value="">
+                  {isMatchesLoading
+                    ? "Загрузка матчей..."
+                    : matches.length === 0
+                    ? "Матчи не найдены"
+                    : "Выбери матч"}
+                </option>
+
+                {matches.map((match) => (
+                  <option key={match.id} value={String(match.id)}>
+                    {buildMatchLabel(match)} · {match.competition} · {formatMatchDateLabel(match.utcDate)} МСК
+                  </option>
+                ))}
+              </select>
+              {errors.selectedMatchId ? (
+                <p className="text-sm text-rose-300">{errors.selectedMatchId}</p>
               ) : null}
             </label>
 
@@ -447,18 +570,35 @@ export function AddPickForm() {
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <label className="space-y-2">
-                    <span className="text-sm text-white/70">Матч / событие</span>
-                    <input
-                      type="text"
-                      value={eventItem.eventName}
-                      onChange={(event) =>
-                        updateExpressEvent(index, "eventName", event.target.value)
+                    <span className="text-sm text-white/70">Матч</span>
+                    <select
+                      value={
+                        matches.find((match) => buildMatchLabel(match) === eventItem.eventName)?.id
+                          ? String(
+                              matches.find((match) => buildMatchLabel(match) === eventItem.eventName)?.id,
+                            )
+                          : ""
                       }
-                      placeholder="Например: Arsenal vs Chelsea"
-                      className={getInputClassName(
+                      onChange={(event) => handleExpressMatchChange(index, event.target.value)}
+                      className={getSelectClassName(
                         Boolean(errors.expressEvents?.[index]?.eventName),
                       )}
-                    />
+                      disabled={isMatchesLoading || matches.length === 0}
+                    >
+                      <option value="">
+                        {isMatchesLoading
+                          ? "Загрузка матчей..."
+                          : matches.length === 0
+                          ? "Матчи не найдены"
+                          : "Выбери матч"}
+                      </option>
+
+                      {matches.map((match) => (
+                        <option key={match.id} value={String(match.id)}>
+                          {buildMatchLabel(match)} · {match.competition}
+                        </option>
+                      ))}
+                    </select>
                     {errors.expressEvents?.[index]?.eventName ? (
                       <p className="text-sm text-rose-300">
                         {errors.expressEvents[index]?.eventName}
@@ -474,7 +614,7 @@ export function AddPickForm() {
                       onChange={(event) =>
                         updateExpressEvent(index, "marketType", event.target.value)
                       }
-                      placeholder="Например: Победа Arsenal"
+                      placeholder="Например: Победа хозяев"
                       className={getInputClassName(
                         Boolean(errors.expressEvents?.[index]?.marketType),
                       )}

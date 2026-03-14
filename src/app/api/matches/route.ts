@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const FOOTBALL_DATA_API_URL = "https://api.football-data.org/v4/matches";
 
@@ -12,7 +12,7 @@ function addDays(date: Date, days: number) {
   return nextDate;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
 
   if (!apiKey) {
@@ -25,9 +25,19 @@ export async function GET() {
     );
   }
 
+  const searchParams = request.nextUrl.searchParams;
+  const day = searchParams.get("day") ?? "today";
+
   const today = new Date();
-  const dateFrom = formatDateToIso(addDays(today, -1));
-  const dateTo = formatDateToIso(addDays(today, 1));
+
+  let targetDate = today;
+
+  if (day === "tomorrow") {
+    targetDate = addDays(today, 1);
+  }
+
+  const dateFrom = formatDateToIso(targetDate);
+  const dateTo = formatDateToIso(targetDate);
 
   const requestUrl = `${FOOTBALL_DATA_API_URL}?dateFrom=${dateFrom}&dateTo=${dateTo}`;
 
@@ -69,6 +79,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
+      day,
       dateFrom,
       dateTo,
       count: matches.length,
