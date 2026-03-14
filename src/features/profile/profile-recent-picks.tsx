@@ -1,4 +1,13 @@
-const recentPicks = [
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { getStoredPicks } from "@/lib/utils/picks-storage";
+import { getRecentProfilePicks } from "@/lib/utils/profile";
+import type { StoredPick } from "@/types/pick";
+
+const currentAuthor = "@visit.vitos.atos";
+
+const demoPicks = [
   {
     id: "1",
     eventName: "Arsenal vs Chelsea",
@@ -25,7 +34,55 @@ const recentPicks = [
   },
 ];
 
+function mapStatusToUi(status: StoredPick["status"]) {
+  if (status === "won") {
+    return {
+      label: "Зашло",
+      className: "bg-emerald-400/15 text-emerald-300",
+    };
+  }
+
+  if (status === "lost") {
+    return {
+      label: "Не зашло",
+      className: "bg-rose-400/15 text-rose-300",
+    };
+  }
+
+  return {
+    label: "Ожидает",
+    className: "bg-white/10 text-white/70",
+  };
+}
+
 export function ProfileRecentPicks() {
+  const [storedPicks, setStoredPicks] = useState<StoredPick[]>([]);
+
+  useEffect(() => {
+    setStoredPicks(getStoredPicks());
+  }, []);
+
+  const recentPicks = useMemo(() => {
+    const localPicks = getRecentProfilePicks(storedPicks, currentAuthor);
+
+    if (localPicks.length === 0) {
+      return demoPicks;
+    }
+
+    return localPicks.map((pick) => {
+      const statusUi = mapStatusToUi(pick.status);
+
+      return {
+        id: pick.id,
+        eventName: pick.eventName,
+        pick: pick.market,
+        odds: pick.odds,
+        status: statusUi.label,
+        statusClassName: statusUi.className,
+      };
+    });
+  }, [storedPicks]);
+
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
       <div className="flex items-end justify-between gap-4">
