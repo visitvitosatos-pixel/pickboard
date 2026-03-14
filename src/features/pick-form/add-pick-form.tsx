@@ -29,6 +29,22 @@ const initialFormState: FormState = {
 
 const draftStorageKey = "pickboard:add-pick-draft";
 
+const sportOptions = [
+  "Футбол",
+  "Баскетбол",
+  "Теннис",
+  "Хоккей",
+  "Киберспорт",
+];
+
+const marketOptions = [
+  "Победа",
+  "Тотал больше",
+  "Тотал меньше",
+  "Обе забьют — да",
+  "Фора",
+];
+
 function formatEventTime(value: string) {
   if (!value) {
     return "Не указано";
@@ -53,6 +69,14 @@ function getInputClassName(hasError: boolean) {
     hasError
       ? "border-rose-400/40 bg-rose-400/5 focus:border-rose-400/60"
       : "border-white/10 bg-white/5 focus:border-white/20"
+  }`;
+}
+
+function getChipClassName(isActive: boolean) {
+  return `rounded-full border px-4 py-2 text-sm transition ${
+    isActive
+      ? "border-white bg-white text-black"
+      : "border-white/10 bg-white/5 text-white/75 hover:bg-white/10 hover:text-white"
   }`;
 }
 
@@ -176,6 +200,14 @@ export function AddPickForm() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
+        <p className="text-sm font-medium text-white">Что важно для рейтинга</p>
+        <p className="mt-2 text-sm leading-6 text-white/65">
+          Чтобы прогноз потом корректно попал в ленту, профиль и рейтинг, обязательно
+          укажи вид спорта, событие, рынок, коэффициент, размер ставки и время начала.
+        </p>
+      </div>
+
       {isDraftLoaded ? (
         <div className="rounded-3xl border border-sky-400/20 bg-sky-400/10 p-4 text-sm text-sky-200">
           Найден сохраненный черновик. Можешь продолжить заполнение формы.
@@ -183,21 +215,37 @@ export function AddPickForm() {
       ) : null}
 
       <form className="space-y-6" onSubmit={handleSubmit}>
-        <section className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
             <span className="text-sm text-white/70">Вид спорта *</span>
-            <input
-              type="text"
-              value={form.sport}
-              onChange={(event) => updateField("sport", event.target.value)}
-              placeholder="Например: Футбол"
-              className={getInputClassName(Boolean(errors.sport))}
-            />
             {errors.sport ? (
               <p className="text-sm text-rose-300">{errors.sport}</p>
             ) : null}
-          </label>
+          </div>
 
+          <div className="flex flex-wrap gap-2">
+            {sportOptions.map((sport) => (
+              <button
+                key={sport}
+                type="button"
+                onClick={() => updateField("sport", sport)}
+                className={getChipClassName(form.sport === sport)}
+              >
+                {sport}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={form.sport}
+            onChange={(event) => updateField("sport", event.target.value)}
+            placeholder="Или введи свой вариант"
+            className={getInputClassName(Boolean(errors.sport))}
+          />
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm text-white/70">Лига</span>
             <input
@@ -208,37 +256,53 @@ export function AddPickForm() {
               className={getInputClassName(Boolean(errors.league))}
             />
           </label>
-        </section>
 
-        <label className="space-y-2">
-          <span className="text-sm text-white/70">Событие *</span>
-          <input
-            type="text"
-            value={form.eventName}
-            onChange={(event) => updateField("eventName", event.target.value)}
-            placeholder="Например: Arsenal vs Chelsea"
-            className={getInputClassName(Boolean(errors.eventName))}
-          />
-          {errors.eventName ? (
-            <p className="text-sm text-rose-300">{errors.eventName}</p>
-          ) : null}
-        </label>
-
-        <section className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
-            <span className="text-sm text-white/70">Рынок *</span>
+            <span className="text-sm text-white/70">Событие *</span>
             <input
               type="text"
-              value={form.marketType}
-              onChange={(event) => updateField("marketType", event.target.value)}
-              placeholder="Например: Победа Arsenal"
-              className={getInputClassName(Boolean(errors.marketType))}
+              value={form.eventName}
+              onChange={(event) => updateField("eventName", event.target.value)}
+              placeholder="Например: Arsenal vs Chelsea"
+              className={getInputClassName(Boolean(errors.eventName))}
             />
+            {errors.eventName ? (
+              <p className="text-sm text-rose-300">{errors.eventName}</p>
+            ) : null}
+          </label>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm text-white/70">Рынок *</span>
             {errors.marketType ? (
               <p className="text-sm text-rose-300">{errors.marketType}</p>
             ) : null}
-          </label>
+          </div>
 
+          <div className="flex flex-wrap gap-2">
+            {marketOptions.map((market) => (
+              <button
+                key={market}
+                type="button"
+                onClick={() => updateField("marketType", market)}
+                className={getChipClassName(form.marketType === market)}
+              >
+                {market}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={form.marketType}
+            onChange={(event) => updateField("marketType", event.target.value)}
+            placeholder="Или введи свой вариант рынка"
+            className={getInputClassName(Boolean(errors.marketType))}
+          />
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
           <label className="space-y-2">
             <span className="text-sm text-white/70">Коэффициент *</span>
             <input
@@ -253,9 +317,7 @@ export function AddPickForm() {
               <p className="text-sm text-rose-300">{errors.odds}</p>
             ) : null}
           </label>
-        </section>
 
-        <section className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
             <span className="text-sm text-white/70">Размер ставки (в юнитах) *</span>
             <input
