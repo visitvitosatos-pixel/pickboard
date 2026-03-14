@@ -1,67 +1,148 @@
 "use client";
 
-import { useMemo } from "react";
-import { getStoredPicks } from "@/lib/utils/picks-storage";
+import { useEffect, useState } from "react";
+import { getStoredPicks, updateStoredPickStatus } from "@/lib/utils/picks-storage";
 import { PickCard } from "@/features/picks/pick-card";
+import type { StoredPick, PickStatus } from "@/types/pick";
 
-const demoPicks = [
+const demoPicks: StoredPick[] = [
   {
-    id: "1",
+    id: "demo-1",
     author: "@sharpstorm",
+    sport: "Футбол",
+    league: "EPL",
     eventName: "Arsenal vs Chelsea",
     market: "Победа Arsenal",
     odds: "1.92",
-    status: "won" as const,
-    note: "Домашняя форма сильнее, соперник нестабилен в обороне.",
-    startTime: "15 мар · 17:30",
     stakeUnits: "3",
+    startTime: "15 мар · 17:30",
+    note: "Домашняя форма сильнее, соперник нестабилен в обороне.",
+    status: "won",
+    createdAt: "2026-03-14T10:00:00.000Z",
   },
   {
-    id: "2",
+    id: "demo-2",
     author: "@betwizard",
+    sport: "Баскетбол",
+    league: "NBA",
     eventName: "Lakers vs Suns",
     market: "Тотал больше 228.5",
     odds: "1.87",
-    status: "pending" as const,
-    note: "Ожидаю быстрый темп и слабую защиту на периметре.",
-    startTime: "15 мар · 23:00",
     stakeUnits: "2",
+    startTime: "15 мар · 23:00",
+    note: "Ожидаю быстрый темп и слабую защиту на периметре.",
+    status: "pending",
+    createdAt: "2026-03-14T11:00:00.000Z",
   },
   {
-    id: "3",
+    id: "demo-3",
     author: "@coldvalue",
+    sport: "Футбол",
+    league: "Serie A",
     eventName: "Inter vs Roma",
     market: "Обе забьют — да",
     odds: "1.76",
-    status: "lost" as const,
-    note: "Ставка по форме атаки, но матч ушел в закрытый сценарий.",
-    startTime: "14 мар · 21:45",
     stakeUnits: "4",
+    startTime: "14 мар · 21:45",
+    note: "Ставка по форме атаки, но матч ушел в закрытый сценарий.",
+    status: "lost",
+    createdAt: "2026-03-14T09:00:00.000Z",
   },
 ];
 
-export function PicksFeed() {
-  const allPicks = useMemo(() => {
-    const storedPicks = getStoredPicks();
+function getStatusButtonClass(isActive: boolean, tone: "neutral" | "success" | "danger") {
+  if (isActive) {
+    if (tone === "success") {
+      return "border-emerald-400/40 bg-emerald-400/15 text-emerald-300";
+    }
 
-    return [...storedPicks, ...demoPicks];
+    if (tone === "danger") {
+      return "border-rose-400/40 bg-rose-400/15 text-rose-300";
+    }
+
+    return "border-white bg-white text-black";
+  }
+
+  return "border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white";
+}
+
+export function PicksFeed() {
+  const [storedPicks, setStoredPicks] = useState<StoredPick[]>([]);
+
+  useEffect(() => {
+    setStoredPicks(getStoredPicks());
   }, []);
+
+  function handleStatusChange(pickId: string, status: PickStatus) {
+    updateStoredPickStatus(pickId, status);
+    setStoredPicks(getStoredPicks());
+  }
+
+  const allPicks = [...storedPicks, ...demoPicks];
 
   return (
     <section className="space-y-4">
-      {allPicks.map((pick) => (
-        <PickCard
-          key={pick.id}
-          author={pick.author}
-          eventName={pick.eventName}
-          market={pick.market}
-          odds={pick.odds}
-          status={pick.status}
-          note={pick.note}
-          startTime={pick.startTime}
-          stakeUnits={pick.stakeUnits}
-        />
-      ))}
+      {allPicks.map((pick) => {
+        const isLocalPick = !pick.id.startsWith("demo-");
+
+        return (
+          <PickCard
+            key={pick.id}
+            author={pick.author}
+            eventName={pick.eventName}
+            market={pick.market}
+            odds={pick.odds}
+            status={pick.status}
+            note={pick.note}
+            startTime={pick.startTime}
+            stakeUnits={pick.stakeUnits}
+            actions={
+              isLocalPick ? (
+                <div className="space-y-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-white/40">
+                    Изменить статус
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(pick.id, "pending")}
+                      className={`rounded-full border px-4 py-2 text-sm transition ${getStatusButtonClass(
+                        pick.status === "pending",
+                        "neutral",
+                      )}`}
+                    >
+                      Ожидает
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(pick.id, "won")}
+                      className={`rounded-full border px-4 py-2 text-sm transition ${getStatusButtonClass(
+                        pick.status === "won",
+                        "success",
+                      )}`}
+                    >
+                      Зашло
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStatusChange(pick.id, "lost")}
+                      className={`rounded-full border px-4 py-2 text-sm transition ${getStatusButtonClass(
+                        pick.status === "lost",
+                        "danger",
+                      )}`}
+                    >
+                      Не зашло
+                    </button>
+                  </div>
+                </div>
+              ) : null
+            }
+          />
+        );
+      })}
     </section>
   );
 }

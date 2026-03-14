@@ -7,6 +7,7 @@ type PickCardProps = {
   note: string;
   startTime: string;
   stakeUnits?: string;
+  actions?: React.ReactNode;
 };
 
 const statusMap: Record<PickCardProps["status"], string> = {
@@ -30,6 +31,7 @@ export function PickCard({
   note,
   startTime,
   stakeUnits,
+  actions,
 }: PickCardProps) {
   return (
     <article className="rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -67,6 +69,8 @@ export function PickCard({
       </div>
 
       <p className="mt-4 text-sm leading-6 text-white/70">{note}</p>
+
+      {actions ? <div className="mt-4">{actions}</div> : null}
     </article>
   );
 }

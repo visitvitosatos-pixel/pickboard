@@ -1,4 +1,4 @@
-import type { StoredPick } from "@/types/pick";
+import type { StoredPick, PickStatus } from "@/types/pick";
 
 const storageKey = "pickboard:picks";
 
@@ -32,8 +32,28 @@ export function savePickToStorage(pick: StoredPick) {
   }
 
   const currentPicks = getStoredPicks();
-
   const nextPicks = [pick, ...currentPicks];
+
+  window.localStorage.setItem(storageKey, JSON.stringify(nextPicks));
+}
+
+export function updateStoredPickStatus(pickId: string, status: PickStatus) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const currentPicks = getStoredPicks();
+
+  const nextPicks = currentPicks.map((pick) => {
+    if (pick.id !== pickId) {
+      return pick;
+    }
+
+    return {
+      ...pick,
+      status,
+    };
+  });
 
   window.localStorage.setItem(storageKey, JSON.stringify(nextPicks));
 }
