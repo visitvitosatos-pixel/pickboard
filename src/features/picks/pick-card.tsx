@@ -6,6 +6,7 @@ type PickCardProps = {
   status: "pending" | "won" | "lost";
   note: string;
   startTime: string;
+  stakeUnits?: string;
 };
 
 const statusMap: Record<PickCardProps["status"], string> = {
@@ -28,6 +29,7 @@ export function PickCard({
   status,
   note,
   startTime,
+  stakeUnits,
 }: PickCardProps) {
   return (
     <article className="rounded-3xl border border-white/10 bg-white/5 p-5">
@@ -45,10 +47,17 @@ export function PickCard({
         </span>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
           <p className="text-xs text-white/50">Коэффициент</p>
           <p className="mt-2 text-xl font-semibold text-white">{odds}</p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p className="text-xs text-white/50">Ставка</p>
+          <p className="mt-2 text-xl font-semibold text-white">
+            {stakeUnits ? `${stakeUnits} юн.` : "—"}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

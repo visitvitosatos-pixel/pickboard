@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PickCard } from "@/features/picks/pick-card";
+import { savePickToStorage } from "@/lib/utils/picks-storage";
+import type { StoredPick } from "@/types/pick";
 
 type FormState = {
   sport: string;
@@ -122,12 +124,36 @@ function validateForm(form: FormState): FormErrors {
   return errors;
 }
 
+function buildStoredPick(form: FormState): StoredPick {
+  return {
+    id: crypto.randomUUID(),
+    author: "@visit.vitos.atos",
+    sport: form.sport,
+    league: form.league,
+    eventName: form.league
+      ? `${form.eventName} · ${form.league}`
+      : form.eventName,
+    market: form.marketType,
+    odds: form.odds,
+    stakeUnits: form.stakeUnits,
+    startTime: formatEventTime(form.eventStartAt),
+    note:
+      form.note ||
+      `Вид спорта: ${form.sport || "не указан"} · Ставка: ${
+        form.stakeUnits || "не указана"
+      } юн.`,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function AddPickForm() {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isDraftSaved, setIsDraftSaved] = useState(false);
-  const [submittedPick, setSubmittedPick] = useState<FormState | null>(null);
+  const [submittedPick, setSubmittedPick] = useState<StoredPick | null>(null);
   const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const [isSavedToFeed, setIsSavedToFeed] = useState(false);
 
   useEffect(() => {
     const savedDraft = window.localStorage.getItem(draftStorageKey);
@@ -163,6 +189,10 @@ export function AddPickForm() {
     if (isDraftSaved) {
       setIsDraftSaved(false);
     }
+
+    if (isSavedToFeed) {
+      setIsSavedToFeed(false);
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -174,12 +204,17 @@ export function AddPickForm() {
       setErrors(nextErrors);
       setSubmittedPick(null);
       setIsDraftSaved(false);
+      setIsSavedToFeed(false);
       return;
     }
 
+    const nextPick = buildStoredPick(form);
+
+    savePickToStorage(nextPick);
     setErrors({});
-    setSubmittedPick(form);
+    setSubmittedPick(nextPick);
     setIsDraftSaved(false);
+    setIsSavedToFeed(true);
     window.localStorage.removeItem(draftStorageKey);
   }
 
@@ -187,6 +222,7 @@ export function AddPickForm() {
     window.localStorage.setItem(draftStorageKey, JSON.stringify(form));
     setIsDraftSaved(true);
     setSubmittedPick(null);
+    setIsSavedToFeed(false);
   }
 
   function handleClearDraft() {
@@ -196,6 +232,7 @@ export function AddPickForm() {
     setIsDraftSaved(false);
     setSubmittedPick(null);
     setIsDraftLoaded(false);
+    setIsSavedToFeed(false);
   }
 
   return (
@@ -405,6 +442,12 @@ export function AddPickForm() {
         </div>
       ) : null}
 
+      {isSavedToFeed ? (
+        <div className="rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-200">
+          Прогноз сохранен локально. Теперь открой ленту — запись уже должна быть там.
+        </div>
+      ) : null}
+
       {submittedPick ? (
         <section className="space-y-4">
           <div>
@@ -415,22 +458,14 @@ export function AddPickForm() {
           </div>
 
           <PickCard
-            author="@visit.vitos.atos"
-            eventName={
-              submittedPick.league
-                ? `${submittedPick.eventName} · ${submittedPick.league}`
-                : submittedPick.eventName || "Без названия события"
-            }
-            market={submittedPick.marketType || "Рынок не указан"}
-            odds={submittedPick.odds || "—"}
-            status="pending"
-            note={
-              submittedPick.note ||
-              `Вид спорта: ${submittedPick.sport || "не указан"} · Ставка: ${
-                submittedPick.stakeUnits || "не указана"
-              } юн.`
-            }
-            startTime={formatEventTime(submittedPick.eventStartAt)}
+            author={submittedPick.author}
+            eventName={submittedPick.eventName}
+            market={submittedPick.market}
+            odds={submittedPick.odds}
+            status={submittedPick.status}
+            note={submittedPick.note}
+            startTime={submittedPick.startTime}
+            stakeUnits={submittedPick.stakeUnits}
           />
         </section>
       ) : null}
