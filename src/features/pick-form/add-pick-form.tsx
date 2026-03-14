@@ -5,39 +5,53 @@ import { PickCard } from "@/features/picks/pick-card";
 import { savePickToStorage } from "@/lib/utils/picks-storage";
 import type { StoredPick } from "@/types/pick";
 
+type BetType = "single" | "express";
+
+type ExpressEvent = {
+  eventName: string;
+  marketType: string;
+};
+
 type FormState = {
+  betType: BetType;
   sport: string;
   league: string;
   eventName: string;
   marketType: string;
   odds: string;
   stakeUnits: string;
-  eventStartAt: string;
   note: string;
+  expressEvents: [ExpressEvent, ExpressEvent, ExpressEvent];
 };
 
-type FormErrors = Partial<Record<keyof FormState, string>>;
+type FormErrors = {
+  eventName?: string;
+  marketType?: string;
+  odds?: string;
+  expressEvents?: Array<{
+    eventName?: string;
+    marketType?: string;
+  }>;
+};
+
+const currentAuthor = "@visit.vitos.atos";
+const draftStorageKey = "pickboard:add-pick-draft";
 
 const initialFormState: FormState = {
-  sport: "",
+  betType: "single",
+  sport: "Футбол",
   league: "",
   eventName: "",
   marketType: "",
   odds: "",
   stakeUnits: "",
-  eventStartAt: "",
   note: "",
+  expressEvents: [
+    { eventName: "", marketType: "" },
+    { eventName: "", marketType: "" },
+    { eventName: "", marketType: "" },
+  ],
 };
-
-const draftStorageKey = "pickboard:add-pick-draft";
-
-const sportOptions = [
-  "Футбол",
-  "Баскетбол",
-  "Теннис",
-  "Хоккей",
-  "Киберспорт",
-];
 
 const marketOptions = [
   "Победа",
@@ -47,23 +61,14 @@ const marketOptions = [
   "Фора",
 ];
 
-function formatEventTime(value: string) {
-  if (!value) {
-    return "Не указано";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Не указано";
-  }
-
+function getMoscowTimestampLabel() {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(date);
+    timeZone: "Europe/Moscow",
+  }).format(new Date());
 }
 
 function getInputClassName(hasError: boolean) {
@@ -82,23 +87,18 @@ function getChipClassName(isActive: boolean) {
   }`;
 }
 
+function buildExpressSummary(events: ExpressEvent[]) {
+  return events
+    .filter((eventItem) => eventItem.eventName.trim() && eventItem.marketType.trim())
+    .map((eventItem, index) => `${index + 1}. ${eventItem.eventName} — ${eventItem.marketType}`)
+    .join(" | ");
+}
+
 function validateForm(form: FormState): FormErrors {
   const errors: FormErrors = {};
 
-  if (!form.sport.trim()) {
-    errors.sport = "Укажи вид спорта.";
-  }
-
-  if (!form.eventName.trim()) {
-    errors.eventName = "Укажи событие.";
-  }
-
-  if (!form.marketType.trim()) {
-    errors.marketType = "Укажи рынок или исход.";
-  }
-
   if (!form.odds.trim()) {
-    errors.odds = "Укажи коэффициент.";
+    errors.odds = "Укажи общий коэффициент.";
   } else {
     const odds = Number(form.odds);
 
@@ -107,41 +107,99 @@ function validateForm(form: FormState): FormErrors {
     }
   }
 
-  if (!form.stakeUnits.trim()) {
-    errors.stakeUnits = "Укажи размер ставки.";
-  } else {
+  if (form.stakeUnits.trim()) {
     const stake = Number(form.stakeUnits);
 
     if (Number.isNaN(stake) || stake <= 0) {
-      errors.stakeUnits = "Размер ставки должен быть больше 0.";
+      errors.odds = errors.odds;
+      errors.expressEvents = errors.expressEvents;
     }
   }
 
-  if (!form.eventStartAt.trim()) {
-    errors.eventStartAt = "Укажи время начала события.";
+  if (form.betType === "single") {
+    if (!form.eventName.trim()) {
+      errors.eventName = "Укажи событие.";
+    }
+
+    if (!form.marketType.trim()) {
+      errors.marketType = "Укажи рынок или исход.";
+    }
+
+    return errors;
+  }
+
+  const expressErrors: Array<{ eventName?: string; marketType?: string }> = [{}, {}, {}];
+  let filledCount = 0;
+
+  form.expressEvents.forEach((eventItem, index) => {
+    const hasEventName = eventItem.eventName.trim().length > 0;
+    const hasMarketType = eventItem.marketType.trim().length > 0;
+
+    if (hasEventName || hasMarketType) {
+      filledCount += 1;
+    }
+
+    if (hasEventName && !hasMarketType) {
+      expressErrors[index].marketType = "Укажи исход.";
+    }
+
+    if (!hasEventName && hasMarketType) {
+      expressErrors[index].eventName = "Укажи событие.";
+    }
+  });
+
+  if (filledCount < 2) {
+    expressErrors[0].eventName = expressErrors[0].eventName ?? "Для экспресса нужно минимум 2 события.";
+  }
+
+  if (expressErrors.some((item) => item.eventName || item.marketType)) {
+    errors.expressEvents = expressErrors;
   }
 
   return errors;
 }
 
 function buildStoredPick(form: FormState): StoredPick {
+  const fixedAtMsk = getMoscowTimestampLabel();
+
+  if (form.betType === "single") {
+    return {
+      id: crypto.randomUUID(),
+      author: currentAuthor,
+      sport: form.sport,
+      league: form.league,
+      eventName: form.league
+        ? `${form.eventName} · ${form.league}`
+        : form.eventName,
+      market: form.marketType,
+      odds: form.odds,
+      stakeUnits: form.stakeUnits || "",
+      startTime: `${fixedAtMsk} МСК`,
+      note:
+        form.note ||
+        `Ординар · Зафиксировано автоматически: ${fixedAtMsk} МСК`,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  const filledEvents = form.expressEvents.filter(
+    (eventItem) => eventItem.eventName.trim() && eventItem.marketType.trim(),
+  );
+
   return {
     id: crypto.randomUUID(),
-    author: "@visit.vitos.atos",
+    author: currentAuthor,
     sport: form.sport,
     league: form.league,
-    eventName: form.league
-      ? `${form.eventName} · ${form.league}`
-      : form.eventName,
-    market: form.marketType,
+    eventName: `Экспресс (${filledEvents.length} события)`,
+    market: buildExpressSummary(filledEvents),
     odds: form.odds,
-    stakeUnits: form.stakeUnits,
-    startTime: formatEventTime(form.eventStartAt),
+    stakeUnits: form.stakeUnits || "",
+    startTime: `${fixedAtMsk} МСК`,
     note:
       form.note ||
-      `Вид спорта: ${form.sport || "не указан"} · Ставка: ${
-        form.stakeUnits || "не указана"
-      } юн.`,
+      `Экспресс · Зафиксировано автоматически: ${fixedAtMsk} МСК`,
     status: "pending",
     createdAt: new Date().toISOString(),
   };
@@ -164,7 +222,11 @@ export function AddPickForm() {
 
     try {
       const parsedDraft = JSON.parse(savedDraft) as FormState;
-      setForm(parsedDraft);
+      setForm({
+        ...initialFormState,
+        ...parsedDraft,
+        expressEvents: parsedDraft.expressEvents ?? initialFormState.expressEvents,
+      });
       setIsDraftLoaded(true);
     } catch {
       window.localStorage.removeItem(draftStorageKey);
@@ -172,7 +234,19 @@ export function AddPickForm() {
   }, []);
 
   const formIsEmpty = useMemo(() => {
-    return Object.values(form).every((value) => value.trim() === "");
+    const singleFieldsEmpty =
+      !form.league.trim() &&
+      !form.eventName.trim() &&
+      !form.marketType.trim() &&
+      !form.odds.trim() &&
+      !form.stakeUnits.trim() &&
+      !form.note.trim();
+
+    const expressFieldsEmpty = form.expressEvents.every(
+      (eventItem) => !eventItem.eventName.trim() && !eventItem.marketType.trim(),
+    );
+
+    return singleFieldsEmpty && expressFieldsEmpty;
   }, [form]);
 
   function updateField(field: keyof FormState, value: string) {
@@ -181,18 +255,28 @@ export function AddPickForm() {
       [field]: value,
     }));
 
-    setErrors((currentErrors) => ({
-      ...currentErrors,
-      [field]: undefined,
-    }));
+    setErrors({});
+    setIsDraftSaved(false);
+    setIsSavedToFeed(false);
+  }
 
-    if (isDraftSaved) {
-      setIsDraftSaved(false);
-    }
+  function updateExpressEvent(index: number, field: keyof ExpressEvent, value: string) {
+    setForm((currentForm) => {
+      const nextEvents = [...currentForm.expressEvents] as [ExpressEvent, ExpressEvent, ExpressEvent];
+      nextEvents[index] = {
+        ...nextEvents[index],
+        [field]: value,
+      };
 
-    if (isSavedToFeed) {
-      setIsSavedToFeed(false);
-    }
+      return {
+        ...currentForm,
+        expressEvents: nextEvents,
+      };
+    });
+
+    setErrors({});
+    setIsDraftSaved(false);
+    setIsSavedToFeed(false);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -238,10 +322,10 @@ export function AddPickForm() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-        <p className="text-sm font-medium text-white">Что важно для рейтинга</p>
+        <p className="text-sm font-medium text-white">Как теперь работает форма</p>
         <p className="mt-2 text-sm leading-6 text-white/65">
-          Чтобы прогноз потом корректно попал в ленту, профиль и рейтинг, обязательно
-          укажи вид спорта, событие, рынок, коэффициент, размер ставки и время начала.
+          Футбол стоит по умолчанию. Время руками вводить не нужно — система сама
+          фиксирует момент публикации по МСК. Для экспресса можно добавить до 3 событий.
         </p>
       </div>
 
@@ -253,36 +337,38 @@ export function AddPickForm() {
 
       <form className="space-y-6" onSubmit={handleSubmit}>
         <section className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm text-white/70">Вид спорта *</span>
-            {errors.sport ? (
-              <p className="text-sm text-rose-300">{errors.sport}</p>
-            ) : null}
-          </div>
+          <span className="text-sm text-white/70">Тип ставки</span>
 
           <div className="flex flex-wrap gap-2">
-            {sportOptions.map((sport) => (
-              <button
-                key={sport}
-                type="button"
-                onClick={() => updateField("sport", sport)}
-                className={getChipClassName(form.sport === sport)}
-              >
-                {sport}
-              </button>
-            ))}
-          </div>
+            <button
+              type="button"
+              onClick={() => updateField("betType", "single")}
+              className={getChipClassName(form.betType === "single")}
+            >
+              Ординар
+            </button>
 
-          <input
-            type="text"
-            value={form.sport}
-            onChange={(event) => updateField("sport", event.target.value)}
-            placeholder="Или введи свой вариант"
-            className={getInputClassName(Boolean(errors.sport))}
-          />
+            <button
+              type="button"
+              onClick={() => updateField("betType", "express")}
+              className={getChipClassName(form.betType === "express")}
+            >
+              Экспресс
+            </button>
+          </div>
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm text-white/70">Вид спорта</span>
+            <input
+              type="text"
+              value={form.sport}
+              onChange={(event) => updateField("sport", event.target.value)}
+              className={getInputClassName(false)}
+            />
+          </label>
+
           <label className="space-y-2">
             <span className="text-sm text-white/70">Лига</span>
             <input
@@ -290,64 +376,130 @@ export function AddPickForm() {
               value={form.league}
               onChange={(event) => updateField("league", event.target.value)}
               placeholder="Например: EPL"
-              className={getInputClassName(Boolean(errors.league))}
+              className={getInputClassName(false)}
             />
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm text-white/70">Событие *</span>
-            <input
-              type="text"
-              value={form.eventName}
-              onChange={(event) => updateField("eventName", event.target.value)}
-              placeholder="Например: Arsenal vs Chelsea"
-              className={getInputClassName(Boolean(errors.eventName))}
-            />
-            {errors.eventName ? (
-              <p className="text-sm text-rose-300">{errors.eventName}</p>
-            ) : null}
           </label>
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm text-white/70">Рынок *</span>
-            {errors.marketType ? (
-              <p className="text-sm text-rose-300">{errors.marketType}</p>
-            ) : null}
-          </div>
+        {form.betType === "single" ? (
+          <>
+            <label className="space-y-2">
+              <span className="text-sm text-white/70">Событие *</span>
+              <input
+                type="text"
+                value={form.eventName}
+                onChange={(event) => updateField("eventName", event.target.value)}
+                placeholder="Например: Arsenal vs Chelsea"
+                className={getInputClassName(Boolean(errors.eventName))}
+              />
+              {errors.eventName ? (
+                <p className="text-sm text-rose-300">{errors.eventName}</p>
+              ) : null}
+            </label>
 
-          <div className="flex flex-wrap gap-2">
-            {marketOptions.map((market) => (
-              <button
-                key={market}
-                type="button"
-                onClick={() => updateField("marketType", market)}
-                className={getChipClassName(form.marketType === market)}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm text-white/70">Рынок *</span>
+                {errors.marketType ? (
+                  <p className="text-sm text-rose-300">{errors.marketType}</p>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {marketOptions.map((market) => (
+                  <button
+                    key={market}
+                    type="button"
+                    onClick={() => updateField("marketType", market)}
+                    className={getChipClassName(form.marketType === market)}
+                  >
+                    {market}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="text"
+                value={form.marketType}
+                onChange={(event) => updateField("marketType", event.target.value)}
+                placeholder="Или введи свой вариант рынка"
+                className={getInputClassName(Boolean(errors.marketType))}
+              />
+            </section>
+          </>
+        ) : (
+          <section className="space-y-4">
+            <div>
+              <p className="text-sm text-white/70">События экспресса *</p>
+              <p className="mt-1 text-sm text-white/50">
+                Добавь минимум 2 и максимум 3 события.
+              </p>
+            </div>
+
+            {form.expressEvents.map((eventItem, index) => (
+              <div
+                key={`express-event-${index}`}
+                className="rounded-3xl border border-white/10 bg-white/5 p-4"
               >
-                {market}
-              </button>
+                <p className="text-sm font-medium text-white">
+                  Событие {index + 1}
+                </p>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm text-white/70">Матч / событие</span>
+                    <input
+                      type="text"
+                      value={eventItem.eventName}
+                      onChange={(event) =>
+                        updateExpressEvent(index, "eventName", event.target.value)
+                      }
+                      placeholder="Например: Arsenal vs Chelsea"
+                      className={getInputClassName(
+                        Boolean(errors.expressEvents?.[index]?.eventName),
+                      )}
+                    />
+                    {errors.expressEvents?.[index]?.eventName ? (
+                      <p className="text-sm text-rose-300">
+                        {errors.expressEvents[index]?.eventName}
+                      </p>
+                    ) : null}
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm text-white/70">Исход</span>
+                    <input
+                      type="text"
+                      value={eventItem.marketType}
+                      onChange={(event) =>
+                        updateExpressEvent(index, "marketType", event.target.value)
+                      }
+                      placeholder="Например: Победа Arsenal"
+                      className={getInputClassName(
+                        Boolean(errors.expressEvents?.[index]?.marketType),
+                      )}
+                    />
+                    {errors.expressEvents?.[index]?.marketType ? (
+                      <p className="text-sm text-rose-300">
+                        {errors.expressEvents[index]?.marketType}
+                      </p>
+                    ) : null}
+                  </label>
+                </div>
+              </div>
             ))}
-          </div>
+          </section>
+        )}
 
-          <input
-            type="text"
-            value={form.marketType}
-            onChange={(event) => updateField("marketType", event.target.value)}
-            placeholder="Или введи свой вариант рынка"
-            className={getInputClassName(Boolean(errors.marketType))}
-          />
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2">
-            <span className="text-sm text-white/70">Коэффициент *</span>
+            <span className="text-sm text-white/70">Общий коэффициент *</span>
             <input
               type="number"
               step="0.01"
               value={form.odds}
               onChange={(event) => updateField("odds", event.target.value)}
-              placeholder="1.92"
+              placeholder="Например: 2.45"
               className={getInputClassName(Boolean(errors.odds))}
             />
             {errors.odds ? (
@@ -356,31 +508,17 @@ export function AddPickForm() {
           </label>
 
           <label className="space-y-2">
-            <span className="text-sm text-white/70">Размер ставки (в юнитах) *</span>
+            <span className="text-sm text-white/70">
+              Размер ставки (необязательно)
+            </span>
             <input
               type="number"
               step="0.5"
               value={form.stakeUnits}
               onChange={(event) => updateField("stakeUnits", event.target.value)}
-              placeholder="3"
-              className={getInputClassName(Boolean(errors.stakeUnits))}
+              placeholder="Например: 3"
+              className={getInputClassName(false)}
             />
-            {errors.stakeUnits ? (
-              <p className="text-sm text-rose-300">{errors.stakeUnits}</p>
-            ) : null}
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm text-white/70">Время начала события *</span>
-            <input
-              type="datetime-local"
-              value={form.eventStartAt}
-              onChange={(event) => updateField("eventStartAt", event.target.value)}
-              className={getInputClassName(Boolean(errors.eventStartAt))}
-            />
-            {errors.eventStartAt ? (
-              <p className="text-sm text-rose-300">{errors.eventStartAt}</p>
-            ) : null}
           </label>
         </section>
 
@@ -391,7 +529,7 @@ export function AddPickForm() {
             value={form.note}
             onChange={(event) => updateField("note", event.target.value)}
             placeholder="Коротко поясни логику прогноза"
-            className={getInputClassName(Boolean(errors.note))}
+            className={getInputClassName(false)}
           />
         </label>
 
