@@ -9,7 +9,8 @@ export type StoredPick = {
   market: string;
   odds: string;
   stakeUnits: string;
-  startTime: string;
+  matchStartTime: string;
+  betPlacedTime: string;
   note: string;
   status: PickStatus;
   createdAt: string;

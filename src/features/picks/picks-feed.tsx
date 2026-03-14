@@ -10,12 +10,13 @@ const demoPicks: StoredPick[] = [
     id: "demo-1",
     author: "@sharpstorm",
     sport: "Футбол",
-    league: "EPL",
+    league: "Premier League",
     eventName: "Arsenal vs Chelsea",
-    market: "Победа Arsenal",
+    market: "Исход: П1",
     odds: "1.92",
     stakeUnits: "3",
-    startTime: "15 мар · 17:30",
+    matchStartTime: "15 мар, 17:30 МСК",
+    betPlacedTime: "14 мар, 10:20 МСК",
     note: "Домашняя форма сильнее, соперник нестабилен в обороне.",
     status: "won",
     createdAt: "2026-03-14T10:00:00.000Z",
@@ -23,14 +24,15 @@ const demoPicks: StoredPick[] = [
   {
     id: "demo-2",
     author: "@betwizard",
-    sport: "Баскетбол",
-    league: "NBA",
-    eventName: "Lakers vs Suns",
-    market: "Тотал больше 228.5",
+    sport: "Футбол",
+    league: "Ligue 1",
+    eventName: "PSG vs Marseille",
+    market: "Тотал больше 2.5",
     odds: "1.87",
     stakeUnits: "2",
-    startTime: "15 мар · 23:00",
-    note: "Ожидаю быстрый темп и слабую защиту на периметре.",
+    matchStartTime: "15 мар, 03:00 МСК",
+    betPlacedTime: "14 мар, 18:05 МСК",
+    note: "Ожидаю открытый сценарий и высокий темп.",
     status: "pending",
     createdAt: "2026-03-14T11:00:00.000Z",
   },
@@ -40,10 +42,11 @@ const demoPicks: StoredPick[] = [
     sport: "Футбол",
     league: "Serie A",
     eventName: "Inter vs Roma",
-    market: "Обе забьют — да",
+    market: "Обе забьют: Да",
     odds: "1.76",
     stakeUnits: "4",
-    startTime: "14 мар · 21:45",
+    matchStartTime: "14 мар, 21:45 МСК",
+    betPlacedTime: "14 мар, 12:10 МСК",
     note: "Ставка по форме атаки, но матч ушел в закрытый сценарий.",
     status: "lost",
     createdAt: "2026-03-14T09:00:00.000Z",
@@ -94,7 +97,8 @@ export function PicksFeed() {
             odds={pick.odds}
             status={pick.status}
             note={pick.note}
-            startTime={pick.startTime}
+            matchStartTime={pick.matchStartTime}
+            betPlacedTime={pick.betPlacedTime}
             stakeUnits={pick.stakeUnits}
             actions={
               isLocalPick ? (

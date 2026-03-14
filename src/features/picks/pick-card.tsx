@@ -5,7 +5,8 @@ type PickCardProps = {
   odds: string;
   status: "pending" | "won" | "lost";
   note: string;
-  startTime: string;
+  matchStartTime: string;
+  betPlacedTime: string;
   stakeUnits?: string;
   actions?: React.ReactNode;
 };
@@ -29,7 +30,8 @@ export function PickCard({
   odds,
   status,
   note,
-  startTime,
+  matchStartTime,
+  betPlacedTime,
   stakeUnits,
   actions,
 }: PickCardProps) {
@@ -49,7 +51,7 @@ export function PickCard({
         </span>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
           <p className="text-xs text-white/50">Коэффициент</p>
           <p className="mt-2 text-xl font-semibold text-white">{odds}</p>
@@ -63,8 +65,17 @@ export function PickCard({
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <p className="text-xs text-white/50">Начало события</p>
-          <p className="mt-2 text-xl font-semibold text-white">{startTime}</p>
+          <p className="text-xs text-white/50">Матч</p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {matchStartTime}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p className="text-xs text-white/50">Ставка сделана</p>
+          <p className="mt-2 text-sm font-semibold text-white">
+            {betPlacedTime}
+          </p>
         </div>
       </div>
 

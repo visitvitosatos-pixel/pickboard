@@ -7,6 +7,7 @@ import type { StoredPick } from "@/types/pick";
 
 type BetType = "single" | "express";
 type MatchDayFilter = "today" | "tomorrow";
+type SingleMarketType = "result" | "btts" | "over" | "under";
 
 type ExpressEvent = {
   eventName: string;
@@ -28,7 +29,8 @@ type FormState = {
   league: string;
   selectedMatchId: string;
   eventName: string;
-  marketType: string;
+  singleMarketType: SingleMarketType;
+  singleMarketValue: string;
   odds: string;
   stakeUnits: string;
   note: string;
@@ -37,7 +39,7 @@ type FormState = {
 
 type FormErrors = {
   selectedMatchId?: string;
-  marketType?: string;
+  singleMarketValue?: string;
   odds?: string;
   expressEvents?: Array<{
     eventName?: string;
@@ -54,7 +56,8 @@ const initialFormState: FormState = {
   league: "",
   selectedMatchId: "",
   eventName: "",
-  marketType: "",
+  singleMarketType: "result",
+  singleMarketValue: "",
   odds: "",
   stakeUnits: "",
   note: "",
@@ -65,22 +68,14 @@ const initialFormState: FormState = {
   ],
 };
 
-const marketOptions = [
-  "Победа",
-  "Тотал больше",
-  "Тотал меньше",
-  "Обе забьют — да",
-  "Фора",
-];
-
-function getMoscowTimestampLabel() {
+function getMoscowTimestampLabel(date?: Date) {
   return new Intl.DateTimeFormat("ru-RU", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Moscow",
-  }).format(new Date());
+  }).format(date ?? new Date());
 }
 
 function formatMatchDateLabel(utcDate: string) {
@@ -90,13 +85,7 @@ function formatMatchDateLabel(utcDate: string) {
     return "Дата неизвестна";
   }
 
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Moscow",
-  }).format(date);
+  return `${getMoscowTimestampLabel(date)} МСК`;
 }
 
 function buildMatchLabel(match: MatchOption) {
@@ -134,6 +123,27 @@ function buildExpressSummary(events: ExpressEvent[]) {
     .join(" | ");
 }
 
+function getSingleMarketLabel(type: SingleMarketType, value: string) {
+  if (type === "result") {
+    if (value === "1") return "Исход: П1";
+    if (value === "X") return "Исход: Х";
+    if (value === "2") return "Исход: П2";
+    return "Исход";
+  }
+
+  if (type === "btts") {
+    if (value === "yes") return "Обе забьют: Да";
+    if (value === "no") return "Обе забьют: Нет";
+    return "Обе забьют";
+  }
+
+  if (type === "over") {
+    return value ? `Тотал больше ${value}` : "Тотал больше";
+  }
+
+  return value ? `Тотал меньше ${value}` : "Тотал меньше";
+}
+
 function validateForm(form: FormState): FormErrors {
   const errors: FormErrors = {};
 
@@ -152,8 +162,17 @@ function validateForm(form: FormState): FormErrors {
       errors.selectedMatchId = "Выбери матч из списка.";
     }
 
-    if (!form.marketType.trim()) {
-      errors.marketType = "Укажи рынок или исход.";
+    if (!form.singleMarketValue.trim()) {
+      errors.singleMarketValue = "Заполни параметр рынка.";
+      return errors;
+    }
+
+    if (form.singleMarketType === "over" || form.singleMarketType === "under") {
+      const totalValue = Number(form.singleMarketValue);
+
+      if (Number.isNaN(totalValue) || totalValue <= 0) {
+        errors.singleMarketValue = "Укажи корректное значение тотала.";
+      }
     }
 
     return errors;
@@ -190,45 +209,43 @@ function validateForm(form: FormState): FormErrors {
   return errors;
 }
 
-function buildStoredPick(form: FormState): StoredPick {
-  const fixedAtMsk = getMoscowTimestampLabel();
+function buildStoredPick(form: FormState, matches: MatchOption[]): StoredPick {
+  const betPlacedAt = `${getMoscowTimestampLabel()} МСК`;
 
   if (form.betType === "single") {
+    const selectedMatch = matches.find((match) => String(match.id) === form.selectedMatchId);
+
     return {
       id: crypto.randomUUID(),
       author: currentAuthor,
       sport: form.sport,
       league: form.league,
       eventName: form.eventName,
-      market: form.marketType,
+      market: getSingleMarketLabel(form.singleMarketType, form.singleMarketValue),
       odds: form.odds,
       stakeUnits: form.stakeUnits || "",
-      startTime: `${fixedAtMsk} МСК`,
-      note:
-        form.note ||
-        `Ординар · Зафиксировано автоматически: ${fixedAtMsk} МСК`,
+      matchStartTime: selectedMatch
+        ? formatMatchDateLabel(selectedMatch.utcDate)
+        : "Неизвестно",
+      betPlacedTime: betPlacedAt,
+      note: form.note || "Ординар",
       status: "pending",
       createdAt: new Date().toISOString(),
     };
   }
-
-  const filledEvents = form.expressEvents.filter(
-    (eventItem) => eventItem.eventName.trim() && eventItem.marketType.trim(),
-  );
 
   return {
     id: crypto.randomUUID(),
     author: currentAuthor,
     sport: form.sport,
     league: form.league,
-    eventName: `Экспресс (${filledEvents.length} события)`,
-    market: buildExpressSummary(filledEvents),
+    eventName: `Экспресс (${form.expressEvents.filter((item) => item.eventName && item.marketType).length} события)`,
+    market: buildExpressSummary(form.expressEvents),
     odds: form.odds,
     stakeUnits: form.stakeUnits || "",
-    startTime: `${fixedAtMsk} МСК`,
-    note:
-      form.note ||
-      `Экспресс · Зафиксировано автоматически: ${fixedAtMsk} МСК`,
+    matchStartTime: "Несколько матчей",
+    betPlacedTime: betPlacedAt,
+    note: form.note || "Экспресс",
     status: "pending",
     createdAt: new Date().toISOString(),
   };
@@ -297,7 +314,7 @@ export function AddPickForm() {
       !form.league.trim() &&
       !form.selectedMatchId.trim() &&
       !form.eventName.trim() &&
-      !form.marketType.trim() &&
+      !form.singleMarketValue.trim() &&
       !form.odds.trim() &&
       !form.stakeUnits.trim() &&
       !form.note.trim();
@@ -372,7 +389,7 @@ export function AddPickForm() {
       return;
     }
 
-    const nextPick = buildStoredPick(form);
+    const nextPick = buildStoredPick(form, matches);
 
     savePickToStorage(nextPick);
     setErrors({});
@@ -402,12 +419,11 @@ export function AddPickForm() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-white/10 bg-black/20 p-4">
-        <p className="text-sm font-medium text-white">Что исправили в логике</p>
+        <p className="text-sm font-medium text-white">Новая логика ординара</p>
         <p className="mt-2 text-sm leading-6 text-white/65">
-          Для ординара матч выбирается только из футбольного API. Плюс добавлен выбор:
-          <span className="font-medium text-white"> сегодня </span>
-          или
-          <span className="font-medium text-white"> завтра</span>.
+          Матч выбирается из API, время матча подтягивается автоматически, а время
+          ставки фиксируется отдельно по МСК. Для исхода теперь нужно указывать:
+          П1, Х или П2.
         </p>
       </div>
 
@@ -452,7 +468,7 @@ export function AddPickForm() {
             <input
               type="text"
               value={form.sport}
-              onChange={(event) => updateField("sport", event.target.value)}
+              readOnly
               className={getInputClassName(false)}
             />
           </label>
@@ -462,7 +478,7 @@ export function AddPickForm() {
             <input
               type="text"
               value={form.league}
-              onChange={(event) => updateField("league", event.target.value)}
+              readOnly
               placeholder="Подставится автоматически после выбора матча"
               className={getInputClassName(false)}
             />
@@ -511,7 +527,7 @@ export function AddPickForm() {
 
                 {matches.map((match) => (
                   <option key={match.id} value={String(match.id)}>
-                    {buildMatchLabel(match)} · {match.competition} · {formatMatchDateLabel(match.utcDate)} МСК
+                    {formatMatchDateLabel(match.utcDate)} · {buildMatchLabel(match)} · {match.competition}
                   </option>
                 ))}
               </select>
@@ -521,34 +537,120 @@ export function AddPickForm() {
             </label>
 
             <section className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-white/70">Рынок *</span>
-                {errors.marketType ? (
-                  <p className="text-sm text-rose-300">{errors.marketType}</p>
-                ) : null}
-              </div>
+              <span className="text-sm text-white/70">Рынок *</span>
 
               <div className="flex flex-wrap gap-2">
-                {marketOptions.map((market) => (
-                  <button
-                    key={market}
-                    type="button"
-                    onClick={() => updateField("marketType", market)}
-                    className={getChipClassName(form.marketType === market)}
-                  >
-                    {market}
-                  </button>
-                ))}
-              </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField("singleMarketType", "result");
+                    updateField("singleMarketValue", "");
+                  }}
+                  className={getChipClassName(form.singleMarketType === "result")}
+                >
+                  Исход
+                </button>
 
-              <input
-                type="text"
-                value={form.marketType}
-                onChange={(event) => updateField("marketType", event.target.value)}
-                placeholder="Или введи свой вариант рынка"
-                className={getInputClassName(Boolean(errors.marketType))}
-              />
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField("singleMarketType", "btts");
+                    updateField("singleMarketValue", "");
+                  }}
+                  className={getChipClassName(form.singleMarketType === "btts")}
+                >
+                  Обе забьют
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField("singleMarketType", "over");
+                    updateField("singleMarketValue", "");
+                  }}
+                  className={getChipClassName(form.singleMarketType === "over")}
+                >
+                  Тотал больше
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField("singleMarketType", "under");
+                    updateField("singleMarketValue", "");
+                  }}
+                  className={getChipClassName(form.singleMarketType === "under")}
+                >
+                  Тотал меньше
+                </button>
+              </div>
             </section>
+
+            {form.singleMarketType === "result" ? (
+              <section className="space-y-3">
+                <span className="text-sm text-white/70">Выбор исхода *</span>
+
+                <div className="flex flex-wrap gap-2">
+                  {["1", "X", "2"].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => updateField("singleMarketValue", value)}
+                      className={getChipClassName(form.singleMarketValue === value)}
+                    >
+                      {value === "1" ? "П1" : value === "X" ? "Х" : "П2"}
+                    </button>
+                  ))}
+                </div>
+
+                {errors.singleMarketValue ? (
+                  <p className="text-sm text-rose-300">{errors.singleMarketValue}</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {form.singleMarketType === "btts" ? (
+              <section className="space-y-3">
+                <span className="text-sm text-white/70">Обе забьют *</span>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "yes", label: "Да" },
+                    { value: "no", label: "Нет" },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => updateField("singleMarketValue", item.value)}
+                      className={getChipClassName(form.singleMarketValue === item.value)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {errors.singleMarketValue ? (
+                  <p className="text-sm text-rose-300">{errors.singleMarketValue}</p>
+                ) : null}
+              </section>
+            ) : null}
+
+            {form.singleMarketType === "over" || form.singleMarketType === "under" ? (
+              <label className="space-y-2">
+                <span className="text-sm text-white/70">Значение тотала *</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={form.singleMarketValue}
+                  onChange={(event) => updateField("singleMarketValue", event.target.value)}
+                  placeholder="Например: 2.5"
+                  className={getInputClassName(Boolean(errors.singleMarketValue))}
+                />
+                {errors.singleMarketValue ? (
+                  <p className="text-sm text-rose-300">{errors.singleMarketValue}</p>
+                ) : null}
+              </label>
+            ) : null}
           </>
         ) : (
           <section className="space-y-4">
@@ -595,7 +697,7 @@ export function AddPickForm() {
 
                       {matches.map((match) => (
                         <option key={match.id} value={String(match.id)}>
-                          {buildMatchLabel(match)} · {match.competition}
+                          {formatMatchDateLabel(match.utcDate)} · {buildMatchLabel(match)}
                         </option>
                       ))}
                     </select>
@@ -614,7 +716,7 @@ export function AddPickForm() {
                       onChange={(event) =>
                         updateExpressEvent(index, "marketType", event.target.value)
                       }
-                      placeholder="Например: Победа хозяев"
+                      placeholder="Например: П1"
                       className={getInputClassName(
                         Boolean(errors.expressEvents?.[index]?.marketType),
                       )}
@@ -742,7 +844,8 @@ export function AddPickForm() {
             odds={submittedPick.odds}
             status={submittedPick.status}
             note={submittedPick.note}
-            startTime={submittedPick.startTime}
+            matchStartTime={submittedPick.matchStartTime}
+            betPlacedTime={submittedPick.betPlacedTime}
             stakeUnits={submittedPick.stakeUnits}
           />
         </section>
