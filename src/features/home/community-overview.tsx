@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export function CommunityOverview() {
   return (
     <section className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
@@ -28,6 +30,15 @@ export function CommunityOverview() {
             <p className="text-xs text-white/50">Официальных пиков</p>
             <p className="mt-2 text-2xl font-semibold text-white">11</p>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <Link
+            href="/pick/new"
+            className="inline-flex rounded-2xl bg-white px-5 py-3 text-sm font-medium text-black transition hover:opacity-90"
+          >
+            Добавить прогноз
+          </Link>
         </div>
       </article>
 
