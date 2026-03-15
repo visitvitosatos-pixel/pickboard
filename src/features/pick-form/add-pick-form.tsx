@@ -1,5 +1,17 @@
 "use client";
 
+// Форма добавления прогноза.
+//
+// Что делает этот файл сейчас:
+// 1) оставляет текущий UI и UX почти без изменений
+// 2) сохраняет legacy StoredPick для существующей ленты
+// 3) использует матч из API как источник названия матча и лиги
+// 4) остаётся совместимым с текущим PickCard
+//
+// Почему так:
+// сначала держим приложение стабильным,
+// потом отдельно переводим feed/profile/leaderboard на новую доменную модель.
+
 import { useEffect, useMemo, useState } from "react";
 import { PickCard } from "@/features/picks/pick-card";
 import { savePickToStorage } from "@/lib/utils/picks-storage";
@@ -47,7 +59,7 @@ type FormErrors = {
   }>;
 };
 
-const currentAuthor = "@visit.vitos.atos";
+const currentAuthor = "@AI_SECTOR_88";
 const draftStorageKey = "pickboard:add-pick-draft";
 
 const initialFormState: FormState = {
@@ -211,6 +223,7 @@ function validateForm(form: FormState): FormErrors {
 
 function buildStoredPick(form: FormState, matches: MatchOption[]): StoredPick {
   const betPlacedAt = `${getMoscowTimestampLabel()} МСК`;
+  const createdAt = new Date().toISOString();
 
   if (form.betType === "single") {
     const selectedMatch = matches.find((match) => String(match.id) === form.selectedMatchId);
@@ -219,8 +232,8 @@ function buildStoredPick(form: FormState, matches: MatchOption[]): StoredPick {
       id: crypto.randomUUID(),
       author: currentAuthor,
       sport: form.sport,
-      league: form.league,
-      eventName: form.eventName,
+      league: selectedMatch ? selectedMatch.competition : form.league,
+      eventName: selectedMatch ? buildMatchLabel(selectedMatch) : form.eventName,
       market: getSingleMarketLabel(form.singleMarketType, form.singleMarketValue),
       odds: form.odds,
       stakeUnits: form.stakeUnits || "",
@@ -230,16 +243,20 @@ function buildStoredPick(form: FormState, matches: MatchOption[]): StoredPick {
       betPlacedTime: betPlacedAt,
       note: form.note || "Ординар",
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
   }
+
+  const filledExpressEvents = form.expressEvents.filter(
+    (item) => item.eventName.trim() && item.marketType.trim(),
+  );
 
   return {
     id: crypto.randomUUID(),
     author: currentAuthor,
     sport: form.sport,
-    league: form.league,
-    eventName: `Экспресс (${form.expressEvents.filter((item) => item.eventName && item.marketType).length} события)`,
+    league: form.league || "Несколько лиг",
+    eventName: `Экспресс (${filledExpressEvents.length} события)`,
     market: buildExpressSummary(form.expressEvents),
     odds: form.odds,
     stakeUnits: form.stakeUnits || "",
@@ -247,7 +264,7 @@ function buildStoredPick(form: FormState, matches: MatchOption[]): StoredPick {
     betPlacedTime: betPlacedAt,
     note: form.note || "Экспресс",
     status: "pending",
-    createdAt: new Date().toISOString(),
+    createdAt,
   };
 }
 
