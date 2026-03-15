@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getStoredPicks } from "@/lib/utils/picks-storage";
-import { getRecentProfilePicks } from "@/lib/utils/profile";
-import type { StoredPick } from "@/types/pick";
+// Последние пики профиля.
+// Читает доменные Pick из dual storage.
 
-const currentAuthor = "@visit.vitos.atos";
+import { useEffect, useMemo, useState } from "react";
+import { getDomainStoredPicks } from "@/lib/utils/picks-storage";
+import type { Pick } from "@/types/pick";
+
+const currentAuthor = "@visit.vitos.bar";
 
 const demoPicks = [
   {
@@ -34,15 +36,15 @@ const demoPicks = [
   },
 ];
 
-function mapStatusToUi(status: StoredPick["status"]) {
-  if (status === "won") {
+function mapDomainStatusToUi(pick: Pick) {
+  if (pick.status === "settled" && pick.settlement.result === "won") {
     return {
       label: "Зашло",
       className: "bg-emerald-400/15 text-emerald-300",
     };
   }
 
-  if (status === "lost") {
+  if (pick.status === "settled" && pick.settlement.result === "lost") {
     return {
       label: "Не зашло",
       className: "bg-rose-400/15 text-rose-300",
@@ -55,28 +57,65 @@ function mapStatusToUi(status: StoredPick["status"]) {
   };
 }
 
+function getPickTitle(pick: Pick) {
+  const firstLeg = pick.legs[0];
+  if (!firstLeg) return "Матч не найден";
+  return `${firstLeg.homeTeam} vs ${firstLeg.awayTeam}`;
+}
+
+function getPickMarket(pick: Pick) {
+  const firstLeg = pick.legs[0];
+  if (!firstLeg) return "Рынок не указан";
+
+  if (firstLeg.marketType === "match_result") {
+    if (firstLeg.marketValue === "1") return "Исход: П1";
+    if (firstLeg.marketValue === "X") return "Исход: Х";
+    if (firstLeg.marketValue === "2") return "Исход: П2";
+  }
+
+  if (firstLeg.marketType === "btts") {
+    return `Обе забьют: ${firstLeg.marketValue === "yes" ? "Да" : "Нет"}`;
+  }
+
+  if (firstLeg.marketType === "total_over") {
+    return `Тотал больше ${firstLeg.marketValue}`;
+  }
+
+  if (firstLeg.marketType === "total_under") {
+    return `Тотал меньше ${firstLeg.marketValue}`;
+  }
+
+  return "Рынок не указан";
+}
+
 export function ProfileRecentPicks() {
-  const [storedPicks, setStoredPicks] = useState<StoredPick[]>([]);
+  const [storedPicks, setStoredPicks] = useState<Pick[]>([]);
 
   useEffect(() => {
-    setStoredPicks(getStoredPicks());
+    setStoredPicks(getDomainStoredPicks());
   }, []);
 
   const recentPicks = useMemo(() => {
-    const localPicks = getRecentProfilePicks(storedPicks, currentAuthor);
+    const localPicks = storedPicks
+      .filter((pick) => pick.authorHandle === currentAuthor)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAtUtc).getTime() - new Date(a.createdAtUtc).getTime(),
+      )
+      .slice(0, 5);
 
     if (localPicks.length === 0) {
       return demoPicks;
     }
 
     return localPicks.map((pick) => {
-      const statusUi = mapStatusToUi(pick.status);
+      const statusUi = mapDomainStatusToUi(pick);
 
       return {
         id: pick.id,
-        eventName: pick.eventName,
-        pick: pick.market,
-        odds: pick.odds,
+        eventName: getPickTitle(pick),
+        pick: getPickMarket(pick),
+        odds: String(pick.totalOdds),
         status: statusUi.label,
         statusClassName: statusUi.className,
       };

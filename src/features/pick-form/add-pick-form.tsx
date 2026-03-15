@@ -726,18 +726,21 @@ export function AddPickForm() {
                   </label>
 
                   <label className="space-y-2">
-                    <span className="text-sm text-white/70">Исход</span>
-                    <input
-                      type="text"
-                      value={eventItem.marketType}
-                      onChange={(event) =>
-                        updateExpressEvent(index, "marketType", event.target.value)
-                      }
-                      placeholder="Например: П1"
-                      className={getInputClassName(
-                        Boolean(errors.expressEvents?.[index]?.marketType),
-                      )}
-                    />
+  <span className="text-sm text-white/70">Исход</span>
+  <select
+    value={eventItem.marketType}
+    onChange={(event) =>
+      updateExpressEvent(index, "marketType", event.target.value)
+    }
+    className={getSelectClassName(
+      Boolean(errors.expressEvents?.[index]?.marketType),
+    )}
+  >
+    <option value="">Выбери исход</option>
+    <option value="П1">П1</option>
+    <option value="Х">Х</option>
+    <option value="П2">П2</option>
+  </select> 
                     {errors.expressEvents?.[index]?.marketType ? (
                       <p className="text-sm text-rose-300">
                         {errors.expressEvents[index]?.marketType}
