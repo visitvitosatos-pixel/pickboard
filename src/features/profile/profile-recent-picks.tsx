@@ -11,15 +11,15 @@ const demoPicks = [
   {
     id: "1",
     eventName: "Arsenal vs Chelsea",
-    pick: "Победа Arsenal",
+    pick: "Исход: П1",
     odds: "1.92",
     status: "Зашло",
     statusClassName: "bg-emerald-400/15 text-emerald-300",
   },
   {
     id: "2",
-    eventName: "Lakers vs Suns",
-    pick: "Тотал больше 228.5",
+    eventName: "PSG vs Marseille",
+    pick: "Тотал больше 2.5",
     odds: "1.87",
     status: "Ожидает",
     statusClassName: "bg-white/10 text-white/70",
@@ -27,7 +27,7 @@ const demoPicks = [
   {
     id: "3",
     eventName: "Inter vs Roma",
-    pick: "Обе забьют — да",
+    pick: "Обе забьют: Да",
     odds: "1.76",
     status: "Не зашло",
     statusClassName: "bg-rose-400/15 text-rose-300",
