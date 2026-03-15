@@ -1,15 +1,16 @@
-/**
- * src/types/pick.ts
- *
- * Здесь лежат типы данных для ставок.
- * Мы оставляем старый тип LegacyStoredPick, чтобы текущий UI не сломался,
- * и параллельно добавляем новую продуктовую модель Pick.
- */
+// Главный файл типов ставок.
+//
+// Что здесь:
+// 1) legacy-тип для текущего UI
+// 2) новая продуктовая модель, которую подключим поэтапно
+//
+// Важно:
+// LegacyStoredPick экспортируется отдельно,
+// потому что его использует pick-mappers.ts.
 
-// Старый статус для текущего локального демо.
 export type LegacyPickStatus = "pending" | "won" | "lost";
 
-// Старый формат ставки из localStorage. Пока оставляем для совместимости.
+// Старый формат ставки, на котором сейчас живёт UI
 export type LegacyStoredPick = {
   id: string;
   author: string;
@@ -26,7 +27,11 @@ export type LegacyStoredPick = {
   createdAt: string;
 };
 
-// Новый статус для продуктовой модели.
+// Пока текущий UI использует именно этот тип
+export type StoredPick = LegacyStoredPick;
+
+// ===== НОВАЯ ПРОДУКТОВАЯ МОДЕЛЬ =====
+
 export type PickStatus =
   | "draft"
   | "published"
@@ -39,14 +44,12 @@ export type PickSettlementResult = "won" | "lost" | "push" | null;
 
 export type PickType = "single" | "express";
 
-// Нормализованный тип рынка.
 export type MarketType =
   | "match_result"
   | "btts"
   | "total_over"
   | "total_under";
 
-// Роли в сообществе. Нужны для будущей модерации и SaaS-логики.
 export type CommunityRole =
   | "owner"
   | "admin"
@@ -54,7 +57,6 @@ export type CommunityRole =
   | "tipster"
   | "member";
 
-// Одна нога ставки. Для single будет 1 leg, для express позже несколько.
 export type PickLeg = {
   id: string;
   matchId: string;
@@ -67,7 +69,6 @@ export type PickLeg = {
   odds: number;
 };
 
-// Новая доменная модель ставки.
 export type Pick = {
   id: string;
   communityId: string;
@@ -101,7 +102,6 @@ export type Pick = {
   };
 };
 
-// История изменения статусов. Нужна для будущего аудита.
 export type PickStatusHistoryItem = {
   id: string;
   pickId: string;
@@ -113,6 +113,3 @@ export type PickStatusHistoryItem = {
   reason: string | null;
   createdAtUtc: string;
 };
-
-// На текущем этапе не ломаем старый UI: StoredPick всё ещё смотрит на legacy тип.
-export type StoredPick = LegacyStoredPick;

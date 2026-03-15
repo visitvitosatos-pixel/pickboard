@@ -1,9 +1,19 @@
+// Карточка ставки в ленте.
+// Пока работает на текущем legacy-формате UI:
+// pending / won / lost
+//
+// Это намеренно.
+// Сначала стабилизируем сборку и текущий интерфейс,
+// потом отдельным шагом переведём карточку на новую модель Pick.
+
+type PickCardStatus = "pending" | "won" | "lost";
+
 type PickCardProps = {
   author: string;
   eventName: string;
   market: string;
   odds: string;
-  status: "pending" | "won" | "lost";
+  status: PickCardStatus;
   note: string;
   matchStartTime: string;
   betPlacedTime: string;
@@ -11,13 +21,13 @@ type PickCardProps = {
   actions?: React.ReactNode;
 };
 
-const statusMap: Record<PickCardProps["status"], string> = {
+const statusMap: Record<PickCardStatus, string> = {
   pending: "bg-white/10 text-white/70",
   won: "bg-emerald-400/15 text-emerald-300",
   lost: "bg-rose-400/15 text-rose-300",
 };
 
-const statusLabelMap: Record<PickCardProps["status"], string> = {
+const statusLabelMap: Record<PickCardStatus, string> = {
   pending: "Ожидает",
   won: "Зашло",
   lost: "Не зашло",

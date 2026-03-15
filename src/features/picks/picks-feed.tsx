@@ -1,9 +1,17 @@
 "use client";
 
+// Лента ставок.
+// Сейчас специально работает на legacy-статусах:
+// pending / won / lost
+//
+// Почему:
+// мы сначала возвращаем проект в стабильную сборку,
+// потом уже переводим storage + feed + card на новую продуктовую модель.
+
 import { useEffect, useState } from "react";
 import { getStoredPicks, updateStoredPickStatus } from "@/lib/utils/picks-storage";
 import { PickCard } from "@/features/picks/pick-card";
-import type { StoredPick, PickStatus } from "@/types/pick";
+import type { StoredPick, LegacyPickStatus } from "@/types/pick";
 
 const demoPicks: StoredPick[] = [
   {
@@ -53,7 +61,10 @@ const demoPicks: StoredPick[] = [
   },
 ];
 
-function getStatusButtonClass(isActive: boolean, tone: "neutral" | "success" | "danger") {
+function getStatusButtonClass(
+  isActive: boolean,
+  tone: "neutral" | "success" | "danger",
+) {
   if (isActive) {
     if (tone === "success") {
       return "border-emerald-400/40 bg-emerald-400/15 text-emerald-300";
@@ -76,7 +87,7 @@ export function PicksFeed() {
     setStoredPicks(getStoredPicks());
   }, []);
 
-  function handleStatusChange(pickId: string, status: PickStatus) {
+  function handleStatusChange(pickId: string, status: LegacyPickStatus) {
     updateStoredPickStatus(pickId, status);
     setStoredPicks(getStoredPicks());
   }
