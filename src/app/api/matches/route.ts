@@ -1,15 +1,106 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const FOOTBALL_DATA_API_URL = "https://api.football-data.org/v4/matches";
+const FOOTBALL_DATA_API_BASE = "https://api.football-data.org/v4";
+const MOSCOW_TIME_ZONE = "Europe/Moscow";
 
-function formatDateToIso(date: Date) {
-  return date.toISOString().slice(0, 10);
+// Лиги, с которыми реально работаем в продукте.
+// Их потом можно вынести в community settings / admin config.
+const SUPPORTED_COMPETITIONS = [
+  { code: "PL", name: "Premier League" },
+  { code: "PD", name: "La Liga" },
+  { code: "SA", name: "Serie A" },
+  { code: "BL1", name: "Bundesliga" },
+  { code: "FL1", name: "Ligue 1" },
+  { code: "PPL", name: "Primeira Liga" },
+  { code: "CL", name: "UEFA Champions League" },
+  { code: "ELC", name: "Championship" },
+] as const;
+
+// Дата YYYY-MM-DD по Москве
+function getMoscowDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MOSCOW_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  return `${year}-${month}-${day}`;
 }
 
-function addDays(date: Date, days: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
+function addDaysToDateString(dateString: string, days: number) {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  utcDate.setUTCDate(utcDate.getUTCDate() + days);
+
+  const nextYear = utcDate.getUTCFullYear();
+  const nextMonth = String(utcDate.getUTCMonth() + 1).padStart(2, "0");
+  const nextDay = String(utcDate.getUTCDate()).padStart(2, "0");
+
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
+function resolveTargetDate(day: string) {
+  const todayMoscow = getMoscowDateString();
+
+  if (day === "tomorrow") {
+    return addDaysToDateString(todayMoscow, 1);
+  }
+
+  return todayMoscow;
+}
+
+// Только полезные для выбора матча статусы
+function isUsefulMatchStatus(status: string) {
+  return status === "SCHEDULED" || status === "TIMED";
+}
+
+type FootballDataMatch = {
+  id: number;
+  utcDate: string;
+  status: string;
+  competition?: {
+    name?: string;
+  };
+  homeTeam?: {
+    name?: string;
+  };
+  awayTeam?: {
+    name?: string;
+  };
+};
+
+async function fetchCompetitionMatches(params: {
+  apiKey: string;
+  competitionCode: string;
+  dateFrom: string;
+  dateTo: string;
+}) {
+  const url =
+    `${FOOTBALL_DATA_API_BASE}/competitions/${params.competitionCode}/matches` +
+    `?dateFrom=${params.dateFrom}&dateTo=${params.dateTo}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "X-Auth-Token": params.apiKey,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Competition ${params.competitionCode} failed with ${response.status}: ${errorText}`,
+    );
+  }
+
+  const data = await response.json();
+  return Array.isArray(data.matches) ? (data.matches as FootballDataMatch[]) : [];
 }
 
 export async function GET(request: NextRequest) {
@@ -19,7 +110,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: "FOOTBALL_DATA_API_KEY is missing in .env.local",
+        error: "FOOTBALL_DATA_API_KEY is missing in environment variables",
       },
       { status: 500 },
     );
@@ -28,60 +119,59 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const day = searchParams.get("day") ?? "today";
 
-  const today = new Date();
-
-  let targetDate = today;
-
-  if (day === "tomorrow") {
-    targetDate = addDays(today, 1);
-  }
-
-  const dateFrom = formatDateToIso(targetDate);
-  const dateTo = formatDateToIso(targetDate);
-
-  const requestUrl = `${FOOTBALL_DATA_API_URL}?dateFrom=${dateFrom}&dateTo=${dateTo}`;
+  const targetDate = resolveTargetDate(day);
+  const dateFrom = targetDate;
+  const dateTo = targetDate;
 
   try {
-    const response = await fetch(requestUrl, {
-      method: "GET",
-      headers: {
-        "X-Auth-Token": apiKey,
-      },
-      cache: "no-store",
-    });
+    const settledResponses = await Promise.allSettled(
+      SUPPORTED_COMPETITIONS.map((competition) =>
+        fetchCompetitionMatches({
+          apiKey,
+          competitionCode: competition.code,
+          dateFrom,
+          dateTo,
+        }),
+      ),
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    const matches = settledResponses
+      .flatMap((result) => {
+        if (result.status === "fulfilled") {
+          return result.value;
+        }
 
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Football Data API request failed",
-          status: response.status,
-          details: errorText,
-        },
-        { status: response.status },
+        return [];
+      })
+      .filter((match) => isUsefulMatchStatus(match.status))
+      .map((match) => ({
+        id: match.id,
+        competition: match.competition?.name ?? "Неизвестный турнир",
+        utcDate: match.utcDate,
+        status: match.status,
+        homeTeam: match.homeTeam?.name ?? "Unknown Home Team",
+        awayTeam: match.awayTeam?.name ?? "Unknown Away Team",
+      }))
+      .sort(
+        (a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime(),
       );
-    }
 
-    const data = await response.json();
-
-    const matches = Array.isArray(data.matches)
-      ? data.matches.map((match: any) => ({
-          id: match.id,
-          competition: match.competition?.name ?? "Неизвестный турнир",
-          utcDate: match.utcDate,
-          status: match.status,
-          homeTeam: match.homeTeam?.name ?? "Unknown Home Team",
-          awayTeam: match.awayTeam?.name ?? "Unknown Away Team",
-        }))
-      : [];
+    const failedCompetitions = settledResponses
+      .map((result, index) => ({
+        result,
+        competition: SUPPORTED_COMPETITIONS[index],
+      }))
+      .filter((item) => item.result.status === "rejected")
+      .map((item) => item.competition.code);
 
     return NextResponse.json({
       ok: true,
       day,
+      timeZone: MOSCOW_TIME_ZONE,
       dateFrom,
       dateTo,
+      supportedCompetitions: SUPPORTED_COMPETITIONS.map((item) => item.code),
+      failedCompetitions,
       count: matches.length,
       matches,
     });
